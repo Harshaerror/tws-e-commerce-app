@@ -93,7 +93,7 @@ build-migration-image:
 # ─────────────────────────────────────────────────────────────────────────────
 run-unit-tests:
   stage: test
-  image: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+  image: node:18 
   script:
     - echo "Running unit tests..."
     # Uncomment the line that matches your stack:
