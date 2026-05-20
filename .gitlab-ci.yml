@@ -4,11 +4,13 @@ variables:
   DOCKER_MIGRATION_IMAGE_NAME: "harsherror/easyshop-migration"
   DOCKER_IMAGE_TAG: "$CI_PIPELINE_IID"
   GIT_BRANCH: "master"
-  # Docker-in-Docker settings
-  DOCKER_HOST: tcp://docker:2376
-  DOCKER_TLS_CERTDIR: "/certs"
-  DOCKER_TLS_VERIFY: 1
-  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  DOCKER_HOST: unix:///var/run/docker.sock
+  DOCKER_DRIVER: overlay2
+
+
+
+
+
 
 stages:
   - prepare
