@@ -168,7 +168,7 @@ trivy-security-scan:
     - echo "Waiting for Docker daemon..."
     - until docker info; do sleep 1; done
     - echo "Logging in to Docker Hub using PAT..."
-    - echo "$DOCKER_HUB_USERNAME" | docker login -u "$DOCKER_HUB_PASSWORD" --password-stdin
+    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
     - echo "Docker Hub login successful"
   tags:
     - docker
