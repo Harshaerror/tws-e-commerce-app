@@ -17,5 +17,5 @@ jobs:
 
       - name: Push to GitLab
         run: |
-          git remote add gitlab https://oauth2:${{ secrets.GITLAB_PAT }}@gitlab.com/harshaerror/tws-e-commerce-app.git
+          git remote add gitlab https://harshalthorat91:${{ secrets.GITLAB_PAT }}@gitlab.com/harshalthorat91/tws-e-commerce-app.git
           git push gitlab master --force
