@@ -226,12 +226,12 @@ update-k8s-manifests:
 
     - echo "Committing and pushing changes..."
     - git add kubernetes/
-    - git diff --cached --quiet && echo "No changes to commit" || git commit -m "ci: update image tags to $DOCKER_IMAGE_TAG [skip ci]"
-    - git push origin master
+    - 'git diff --cached --quiet && echo "No changes to commit" || git commit -m "ci: update image tags to $DOCKER_IMAGE_TAG [skip ci]"'
+    - 'git push origin master'
 
     - echo "Kubernetes manifests updated successfully"
 
-  needs:
+  needs: 
     - push-main-app-image
     - push-migration-image
   tags:
