@@ -52,9 +52,9 @@ clone-repository:
 # ─────────────────────────────────────────────────────────────────────────────
 .docker-build-base:
   stage: build
-  image: docker:24.0
+  image: docker:27.0
   services:
-    - docker:24.0-dind
+    - docker:27.0-dind
   before_script:
     - echo "Waiting for Docker daemon..."
     - until docker info; do sleep 1; done
@@ -163,9 +163,9 @@ trivy-security-scan:
 # ─────────────────────────────────────────────────────────────────────────────
 .docker-push-base:
   stage: push
-  image: docker:24.0
+  image: docker:27.0
   services:
-    - docker:24.0-dind
+    - docker:27.0-dind
   before_script:
     - echo "Waiting for Docker daemon..."
     - until docker info; do sleep 1; done
