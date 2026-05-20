@@ -1,0 +1,238 @@
+
+variables:
+  DOCKER_IMAGE_NAME: "harsherror/easyshop-app"
+  DOCKER_MIGRATION_IMAGE_NAME: "harsherror/easyshop-migration"
+  DOCKER_IMAGE_TAG: "$CI_PIPELINE_IID"
+  GIT_BRANCH: "master"
+  # Docker-in-Docker settings
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: 1
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+stages:
+  - prepare
+  - build
+  - test
+  - security
+  - push
+  - update-manifests
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 1 — Cleanup Workspace
+# ─────────────────────────────────────────────────────────────────────────────
+cleanup-workspace:
+  stage: prepare
+  script:
+    - echo "Cleaning workspace..."
+    - rm -rf ./* ./.??* || true
+    - echo "Workspace cleaned successfully"
+  tags:
+    - docker
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 2 — Clone Repository
+# GitLab auto-clones, but we mirror the Jenkins checkout behavior
+# ─────────────────────────────────────────────────────────────────────────────
+clone-repository:
+  stage: prepare
+  script:
+    - echo "Repository cloned by GitLab CI at $CI_PROJECT_DIR"
+    - git checkout $GIT_BRANCH
+    - git log -1 --oneline
+  needs:
+    - cleanup-workspace
+  tags:
+    - docker
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED — Docker build base (reused by both build jobs)
+# ─────────────────────────────────────────────────────────────────────────────
+.docker-build-base:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  before_script:
+    - echo "Waiting for Docker daemon..."
+    - until docker info; do sleep 1; done
+  needs:
+    - clone-repository
+  tags:
+    - docker
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 3 — Build Docker Images (runs in parallel)
+# ─────────────────────────────────────────────────────────────────────────────
+build-main-app-image:
+  extends: .docker-build-base
+  script:
+    - echo "Building main app image..."
+    - docker build
+        -f Dockerfile
+        -t $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+        -t $DOCKER_IMAGE_NAME:latest
+        .
+    - echo "Built successfully -> $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+
+build-migration-image:
+  extends: .docker-build-base
+  script:
+    - echo "Building migration image..."
+    - docker build
+        -f scripts/Dockerfile.migration
+        -t $DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG
+        -t $DOCKER_MIGRATION_IMAGE_NAME:latest
+        .
+    - echo "Built successfully -> $DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 4 — Run Unit Tests
+# ─────────────────────────────────────────────────────────────────────────────
+run-unit-tests:
+  stage: test
+  image: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+  script:
+    - echo "Running unit tests..."
+    # Uncomment the line that matches your stack:
+    - npm test                  # Node.js
+    # - python -m pytest        # Python
+    # - mvn test                # Java / Maven
+    # - go test ./...           # Go
+  needs:
+    - build-main-app-image
+  tags:
+    - docker
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/*.xml   # adjust to your test output path
+    paths:
+      - test-results/
+    expire_in: 7 days
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 5 — Security Scan with Trivy
+# ─────────────────────────────────────────────────────────────────────────────
+trivy-security-scan:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache"
+  script:
+    - mkdir -p trivy-results
+
+    - echo "Scanning main app image..."
+    - trivy image
+        --exit-code 0
+        --severity HIGH,CRITICAL
+        --format template
+        --template "@/contrib/gitlab.tpl"
+        --output trivy-results/main-app-report.json
+        $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+
+    - echo "Scanning migration image..."
+    - trivy image
+        --exit-code 0
+        --severity HIGH,CRITICAL
+        --format table
+        $DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG
+
+  needs:
+    - build-main-app-image
+    - build-migration-image
+  tags:
+    - docker
+  cache:
+    paths:
+      - .trivycache/
+  artifacts:
+    when: always
+    paths:
+      - trivy-results/
+    expire_in: 7 days
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED — Docker push base (reused by both push jobs)
+# Uses DOCKERHUB_USERNAME and DOCKERHUB_PAT from GitLab CI/CD Variables
+# ─────────────────────────────────────────────────────────────────────────────
+.docker-push-base:
+  stage: push
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  before_script:
+    - echo "Waiting for Docker daemon..."
+    - until docker info; do sleep 1; done
+    - echo "Logging in to Docker Hub using PAT..."
+    - echo "$DOCKERHUB_PAT" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - echo "Docker Hub login successful"
+  tags:
+    - docker
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 6 — Push Docker Images (runs in parallel)
+# ─────────────────────────────────────────────────────────────────────────────
+push-main-app-image:
+  extends: .docker-push-base
+  script:
+    - echo "Pushing main app image..."
+    - docker push $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - docker push $DOCKER_IMAGE_NAME:latest
+    - echo "Pushed successfully -> $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+  needs:
+    - trivy-security-scan
+    - run-unit-tests
+
+push-migration-image:
+  extends: .docker-push-base
+  script:
+    - echo "Pushing migration image..."
+    - docker push $DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - docker push $DOCKER_MIGRATION_IMAGE_NAME:latest
+    - echo "Pushed successfully -> $DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+  needs:
+    - trivy-security-scan
+    - run-unit-tests
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 7 — Update Kubernetes Manifests
+# Uses GITHUB_PAT from GitLab CI/CD Variables to push back to GitHub
+# ─────────────────────────────────────────────────────────────────────────────
+update-k8s-manifests:
+  stage: update-manifests
+  image: alpine/git:latest
+  script:
+    - echo "Configuring git identity..."
+    - git config --global user.name "GitLab CI"
+    - git config --global user.email "thoratharshal19@gmail.com"
+
+    - echo "Cloning GitHub repo using PAT..."
+    - git clone https://oauth2:$GITHUB_PAT@github.com/Harshaerror/tws-e-commerce-app.git repo
+    - cd repo
+
+    - echo "Updating main app image tag in Kubernetes manifests..."
+    - |
+      find kubernetes/ \( -name "*.yaml" -o -name "*.yml" \) | xargs sed -i \
+        "s|$DOCKER_IMAGE_NAME:.*|$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG|g"
+
+    - echo "Updating migration image tag in Kubernetes manifests..."
+    - |
+      find kubernetes/ \( -name "*.yaml" -o -name "*.yml" \) | xargs sed -i \
+        "s|$DOCKER_MIGRATION_IMAGE_NAME:.*|$DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG|g"
+
+    - echo "Committing and pushing changes..."
+    - git add kubernetes/
+    - git diff --cached --quiet && echo "No changes to commit" || git commit -m "ci: update image tags to $DOCKER_IMAGE_TAG [skip ci]"
+    - git push origin master
+
+    - echo "Kubernetes manifests updated successfully"
+
+  needs:
+    - push-main-app-image
+    - push-migration-image
+  tags:
+    - docker
