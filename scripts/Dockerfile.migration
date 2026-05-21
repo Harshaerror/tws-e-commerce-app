@@ -1,25 +1,46 @@
-# Use Node.js 18 Alpine as base
-FROM node:18-alpine
-
-# Set working directory
+# ==========================================
+# STAGE 1: Build & Compile TypeScript
+# ==========================================
+FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Install necessary build dependencies
+# Install build tools required for native node modules
 RUN apk add --no-cache python3 make g++
 
-# Copy package files and tsconfig
+# Copy package configurations and TypeScript settings
 COPY package*.json tsconfig.json ./
 
-# Copy scripts and data
+# Copy your source script files
 COPY scripts ./scripts
-#COPY .db ./.db
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
-RUN npm install --save-dev @types/mongoose --legacy-peer-deps
+# Install ALL dependencies (including devDependencies like typescript)
+RUN npm ci --legacy-peer-deps
 
-# Set environment variables
-ENV NODE_ENV=development
+# Compile the TypeScript files into vanilla JavaScript
+# This creates a "dist" folder with your compiled .js files
+RUN npx tsc --project scripts/tsconfig.json
 
-# Command to run migration
-CMD ["npx", "ts-node", "--project", "scripts/tsconfig.json", "scripts/migrate-data.ts"]
+# Prune node_modules down to ONLY production dependencies
+RUN npm prune --production --legacy-peer-deps
+
+
+# ==========================================
+# STAGE 2: Lightweight Production Runtime
+# ==========================================
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+# Switch to production to ensure optimal performance
+ENV NODE_ENV=production
+
+# 1. Copy ONLY the slimmed-down production node_modules
+COPY --from=builder /app/node_modules ./node_modules
+
+# 2. Copy the compiled JavaScript files from the builder stage
+COPY --from=builder /app/dist ./dist
+
+# Optional: If your scripts load local JSON/CSV data files from the script directory, copy them
+# COPY --from=builder /app/scripts/data ./dist/data
+
+# Command to run the compiled JavaScript directly with vanilla node (Fast & Tiny)
+CMD ["node", "dist/migrate-data.js"]
