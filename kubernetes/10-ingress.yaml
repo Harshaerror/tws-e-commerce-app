@@ -11,7 +11,7 @@ spec:
   tls:
   - hosts:
     - 34.249.30.168.nip.io
-    secretName: easyshop-tls-secret  # Cert-Manager will manage this
+    secretName: easyshop-tls  # Cert-Manager will manage this
   rules:
   - host: 34.249.30.168.nip.io
     http:
