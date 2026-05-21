@@ -191,8 +191,9 @@ push-migration-image:
 # ─────────────────────────────────────────────────────────────────────────────
 update-k8s-manifests:
   stage: update-manifests
-  image: alpine:latest
+  image: ubuntu:22.04
   script:
+    - apt-get update -qq && apt-get install -y git findutils sed
     - echo "Configuring git identity..."
     - git config --global user.name "GitLab CI"
     - git config --global user.email "thoratharshal19@gmail.com"
@@ -201,12 +202,12 @@ update-k8s-manifests:
     - git clone https://oauth2:$GITHUB_PAT@github.com/Harshaerror/tws-e-commerce-app.git repo
     - cd repo
 
-    - echo "Updating main app image tag in Kubernetes manifests..."
+    - echo "Updating main app image tag..."
     - |
       find kubernetes/ \( -name "*.yaml" -o -name "*.yml" \) | xargs sed -i \
         "s|$DOCKER_IMAGE_NAME:.*|$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG|g"
 
-    - echo "Updating migration image tag in Kubernetes manifests..."
+    - echo "Updating migration image tag..."
     - |
       find kubernetes/ \( -name "*.yaml" -o -name "*.yml" \) | xargs sed -i \
         "s|$DOCKER_MIGRATION_IMAGE_NAME:.*|$DOCKER_MIGRATION_IMAGE_NAME:$DOCKER_IMAGE_TAG|g"
@@ -214,9 +215,10 @@ update-k8s-manifests:
     - echo "Committing and pushing changes..."
     - git add kubernetes/
     - |
-      git diff --cached --quiet && echo "No changes to commit" || git commit -m "ci: update image tags to $DOCKER_IMAGE_TAG [skip ci]"
+      git diff --cached --quiet \
+        && echo "No changes to commit" \
+        || git commit -m "ci: update image tags to $DOCKER_IMAGE_TAG"
     - git push origin master
-
     - echo "Kubernetes manifests updated successfully"
 
   needs:
