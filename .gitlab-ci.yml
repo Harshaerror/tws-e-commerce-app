@@ -195,11 +195,11 @@ update-k8s-manifests:
   script:
     - apt-get update -qq && apt-get install -y git findutils sed
     - echo "Configuring git identity..."
-    - git config --global user.name "GitLab CI"
-    - git config --global user.email "thoratharshal19@gmail.com"
+    - git config --global user.name "Harshaerror"
+    - git config --global user.email "harshalthorat91@gmail.com"
 
     - echo "Cloning GitHub repo using PAT..."
-    - git clone https://oauth2:$GITHUB_PAT@github.com/Harshaerror/tws-e-commerce-app.git repo
+    - git clone https://oauth2:$GITHUB_TOKEN@github.com/Harshaerror/tws-e-commerce-app.git repo
     - cd repo
 
     - echo "Updating main app image tag..."
