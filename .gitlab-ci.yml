@@ -191,7 +191,7 @@ push-migration-image:
 # ─────────────────────────────────────────────────────────────────────────────
 update-k8s-manifests:
   stage: update-manifests
-  image: alpine/git:latest
+  image: alpine:latest
   script:
     - echo "Configuring git identity..."
     - git config --global user.name "GitLab CI"
