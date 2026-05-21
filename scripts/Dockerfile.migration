@@ -15,8 +15,8 @@ COPY scripts ./scripts
 #COPY .db ./.db
 
 # Install dependencies
-RUN npm install
-RUN npm install --save-dev @types/mongoose
+RUN npm install --legacy-peer-deps
+RUN npm install --save-dev @types/mongoose --legacy-peer-deps
 
 # Set environment variables
 ENV NODE_ENV=development
